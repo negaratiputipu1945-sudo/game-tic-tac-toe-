@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tic Tac Toe </title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{--accent:#ff69b4}
+body{
+  background:linear-gradient(135deg,#0f0f0f,#1a1a1a);
+  font-family:Segoe UI,sans-serif;
+  color:#fff;
+  text-align:center
+}
+h1{text-shadow:0 0 15px var(--accent)}
+.container{
+  max-width:420px;
+  margin:auto;
+  padding:20px;
+  background:rgba(255,255,255,.1);
+  backdrop-filter:blur(15px);
+  border-radius:20px;
+  box-shadow:0 0 40px #000;
+  position:relative
+}
+select,button{
+  width:100%;margin:6px 0;padding:10px;
+  border-radius:10px;background:#111;color:#fff;
+  border:1px solid var(--accent);cursor:pointer
+}
+select:hover,button:hover{background:var(--accent);color:#000}
+.board{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;margin:15px 0;
+}
+.cell{
+  height:90px;font-size:42px;
+  display:flex;align-items:center;justify-content:center;
+  background:#111;border-radius:15px;
+  cursor:pointer;transition:.15s
+}
+.cell:hover{background:var(--accent);color:#000}
+.score{display:flex;justify-content:space-around}
+.toggle{display:flex;justify-content:space-between}
+
+@keyframes pop{0%{scale:0}80%{scale:1.2}100%{scale:1}}
+@keyframes glow{0%{box-shadow:0 0 5px #0ff}50%{box-shadow:0 0 30px #0ff}100%{box-shadow:0 0 5px #0ff}}
+@keyframes shake{25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-6px)}}
+@keyframes particle{to{transform:translate(var(--x),var(--y)) scale(0);opacity:0}}
+
+.cell.filled{animation:pop .25s}
+.win{animation:glow 1s infinite}
+.board.draw{animation:shake .4s}
+
+.particle{
+  position:absolute;width:8px;height:8px;border-radius:50%;
+  background:var(--accent);pointer-events:none;
+  animation:particle .6s forwards
+}
+</style>
+</head>
+
+<body>
+<h1>Tic Tac Toe</h1>
+
+<div class="container">
+<svg id="line" width="100%" height="300"
+     style="position:absolute;top:0;left:0;pointer-events:none"></svg>
+
+<select id="mode">
+<option value="npc">Lawan NPC</option>
+<option value="pvp">Player vs Player</option>
+</select>
+
+<select id="difficulty">
+<option value="0">Sangat Mudah</option>
+<option value="1">Mudah</option>
+<option value="2">Sulit</option>
+<option value="3">Mustahil</option>
+<option value="4">Sangat Mustahil</option>
+</select>
+
+<select id="theme">
+<option value="#ff69b4">Pink Neon</option>
+<option value="#00bfff">Blue Cyber</option>
+<option value="#00ff99">Green Matrix</option>
+<option value="#9d4edd">Purple Void</option>
+</select>
+
+<div class="toggle"><span>🔊 Sound</span><input type="checkbox" id="soundToggle" checked></div>
+
+<div id="status">Giliran: X</div>
+
+<div class="score">
+<div>X: <span id="xScore">0</span></div>
+<div>O: <span id="oScore">0</span></div>
+<div>D: <span id="dScore">0</span></div>
+</div>
+
+<div class="board" id="board"></div>
+
+<button onclick="resetAll()">Reset Semua</button>
+</div>
+
+<script>
+const sClick=new Audio("https://assets.mixkit.co/active_storage/sfx/3005/3005-preview.mp3");
+const sWin=new Audio("https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3");
+const sLose=new Audio("https://assets.mixkit.co/active_storage/sfx/2020/2020-preview.mp3");
+const sDraw=new Audio("https://assets.mixkit.co/active_storage/sfx/2691/2691-preview.mp3");
+const play=s=>soundToggle.checked&&(s.currentTime=0,s.play());
+
+const board=document.getElementById("board");
+const statusEl=document.getElementById("status");
+const xScoreEl=document.getElementById("xScore");
+const oScoreEl=document.getElementById("oScore");
+const dScoreEl=document.getElementById("dScore");
+const svg=document.getElementById("line");
+
+let state=Array(9).fill("");
+let turn="X",over=false;
+let score=JSON.parse(localStorage.getItem("ttt"))||{X:0,O:0,D:0};
+const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+theme.onchange=e=>document.documentElement.style.setProperty("--accent",e.target.value);
+mode.onchange=resetGame;
+difficulty.onchange=resetGame;
+
+function draw(){
+  board.innerHTML="";
+  state.forEach((v,i)=>{
+    const c=document.createElement("div");
+    c.className="cell";
+    if(v){c.textContent=v;c.classList.add("filled")}
+    c.onclick=()=>move(i);
+    board.appendChild(c);
+  });
+}
+draw();update();
+
+function move(i){
+  if(state[i]||over)return;
+  play(sClick);
+  state[i]=turn;draw();
+  if(check(turn))return end(turn);
+  if(state.every(x=>x))return end("D");
+  turn=turn==="X"?"O":"X";
+  statusEl.textContent="Giliran: "+turn;
+  if(mode.value==="npc"&&turn==="O"){over=true;setTimeout(ai,350)}
+}
+
+function end(w){
+  over=true;
+  if(w==="D"){
+    statusEl.textContent="Seri!";
+    board.classList.add("draw");
+    play(sDraw);
+    score.D++;
+  }else{
+    statusEl.textContent=w+" Menang!";
+    winAnim(w);
+    play(w==="X"?sWin:sLose);
+    score[w]++;
+  }
+  update();
+  setTimeout(resetGame,1000);
+}
+
+/* ================= AI ================= */
+
+function ai(){
+  let moveIndex;
+  const lvl=+difficulty.value;
+
+  if(lvl===0) moveIndex=randomMove();
+  else if(lvl===1) moveIndex=Math.random()<0.6?randomMove():bestMove(2);
+  else if(lvl===2) moveIndex=bestMove(3);
+  else if(lvl===3) moveIndex=bestMove(8);
+  else moveIndex=bestMove(9);
+
+  state[moveIndex]="O";draw();
+  if(check("O"))return end("O");
+  if(state.every(x=>x))return end("D");
+  turn="X";over=false;statusEl.textContent="Giliran: X";
+}
+
+function randomMove(){
+  const e=state.map((v,i)=>v?null:i).filter(i=>i!==null);
+  return e[Math.floor(Math.random()*e.length)];
+}
+function bestMove(d){
+  let b=-Infinity,m;
+  state.forEach((v,i)=>{
+    if(!v){
+      state[i]="O";
+      let s=minimax(d,false);
+      state[i]="";
+      if(s>b){b=s;m=i}
+    }
+  });
+  return m;
+}
+function minimax(d,max){
+  if(check("O"))return 10+d;
+  if(check("X"))return -10-d;
+  if(!d||state.every(x=>x))return 0;
+  let b=max?-Infinity:Infinity;
+  state.forEach((v,i)=>{
+    if(!v){
+      state[i]=max?"O":"X";
+      let s=minimax(d-1,!max);
+      state[i]="";
+      b=max?Math.max(b,s):Math.min(b,s);
+    }
+  });
+  return b;
+}
+
+
+
+>by negara penuh tipu tipu 
+
+
+
+
+/* ============ GARIS WIN FIX ============ */
+
+function winAnim(p){
+  wins.forEach(w=>{
+    if(w.every(i=>state[i]===p)){
+      w.forEach(i=>board.children[i].classList.add("win"));
+      drawLine(w);
+      particles(w[1]);
+    }
+  });
+}
+
+function drawLine(w){
+  svg.innerHTML="";
+
+  const a=board.children[w[0]].getBoundingClientRect();
+  const b=board.children[w[2]].getBoundingClientRect();
+  const p=board.getBoundingClientRect();
+
+  const x1=a.left+a.width/2-p.left;
+  const y1=a.top+a.height/2-p.top;
+  const x2=b.left+b.width/2-p.left;
+  const y2=b.top+b.height/2-p.top;
+
+  const l=document.createElementNS("http://www.w3.org/2000/svg","line");
+  l.setAttribute("x1",x1);
+  l.setAttribute("y1",y1);
+  l.setAttribute("x2",x1);
+  l.setAttribute("y2",y1);
+  l.setAttribute("stroke","var(--accent)");
+  l.setAttribute("stroke-width","8");
+  l.setAttribute("stroke-linecap","round");
+
+  svg.appendChild(l);
+
+  l.animate(
+    [{x2:x1,y2:y1},{x2:x2,y2:y2}],
+    {duration:400,easing:"ease-out",fill:"forwards"}
+  );
+}
+
+function particles(i){
+  const r=board.children[i].getBoundingClientRect();
+  for(let n=0;n<10;n++){
+    const p=document.createElement("div");
+    p.className="particle";
+    p.style.left=r.left+r.width/2+"px";
+    p.style.top=r.top+r.height/2+"px";
+    p.style.setProperty("--x",(Math.random()*120-60)+"px");
+    p.style.setProperty("--y",(Math.random()*120-60)+"px");
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(),600);
+  }
+}
+
+const check=p=>wins.some(w=>w.every(i=>state[i]===p));
+function update(){
+  xScoreEl.textContent=score.X;
+  oScoreEl.textContent=score.O;
+  dScoreEl.textContent=score.D;
+  localStorage.setItem("ttt",JSON.stringify(score));
+}
+function resetGame(){
+  state.fill("");turn="X";over=false;
+  svg.innerHTML="";board.classList.remove("draw");
+  statusEl.textContent="Giliran: X";draw();
+}
+function resetAll(){
+  score={X:0,O:0,D:0};
+  update();resetGame();
+}
+</script>
+</body>
+</html>
